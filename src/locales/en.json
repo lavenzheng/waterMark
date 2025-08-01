@@ -20,3 +20,10 @@
     "custom": "Custom",
     "horizontal_position": "Horizontal Position",
     "vertical_position": "Vertical Position"
+  },
+  "placeholder": {
+    "base": "Select a table",
+    "view": "Select a view",
+    "field": "Select a field"
+  }
+}
