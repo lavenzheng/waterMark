@@ -1,0 +1,29 @@
+{
+  "label": {
+    "base": "数据表",
+    "view": "视图",
+    "field": "字段",
+    "current": "当前选中单元格数据",
+    "image_preview": "图片预览",
+    "watermark_settings": "水印设置",
+    "watermark_text": "水印文本",
+    "font": "字体",
+    "font_size": "字体大小",
+    "color": "颜色",
+    "opacity": "透明度",
+    "position": "位置",
+    "center": "居中",
+    "top_left": "左上",
+    "top_right": "右上",
+    "bottom_left": "左下",
+    "bottom_right": "右下",
+    "custom": "自定义",
+    "horizontal_position": "横向位置",
+    "vertical_position": "纵向位置"
+  },
+  "placeholder": {
+    "base": "请选择数据表",
+    "view": "请选择视图",
+    "field": "请选择字段"
+  }
+}

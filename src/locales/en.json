@@ -1,0 +1,22 @@
+{
+  "label": {
+    "base": "Table",
+    "view": "View",
+    "field": "Field",
+    "current": "Current selected cell data",
+    "image_preview": "Image Preview",
+    "watermark_settings": "Watermark Settings",
+    "watermark_text": "Watermark Text",
+    "font": "Font",
+    "font_size": "Font Size",
+    "color": "Color",
+    "opacity": "Opacity",
+    "position": "Position",
+    "center": "Center",
+    "top_left": "Top Left",
+    "top_right": "Top Right",
+    "bottom_left": "Bottom Left",
+    "bottom_right": "Bottom Right",
+    "custom": "Custom",
+    "horizontal_position": "Horizontal Position",
+    "vertical_position": "Vertical Position"
