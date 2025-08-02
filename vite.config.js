@@ -35,6 +35,27 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    // 构建优化
+    target: 'es2015',
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true, // 生产环境移除console
+        drop_debugger: true, // 生产环境移除debugger
+      },
+    },
+    rollupOptions: {
+      output: {
+        // 代码分割
+        manualChunks: {
+          vendor: ['vue', 'vue-i18n'],
+          element: ['element-plus'],
+          sdk: ['@lark-base-open/js-sdk'],
+        },
+      },
+    },
+  },
   plugins: [
     vue(),
 

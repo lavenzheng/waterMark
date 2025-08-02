@@ -10,31 +10,12 @@
   import { bitable } from '@lark-base-open/js-sdk';
   import { ref, onMounted, watch, watchEffect, computed } from 'vue';
 
-  // 增强版全局错误处理器
-  window.addEventListener('error', (event) => {
-    console.error('全局错误捕获:', event.error);
-    console.error('错误堆栈:', event.error.stack);
-    console.error('错误发生在:', event.filename, '行号:', event.lineno);
-    console.error('错误时间:', new Date().toLocaleString());
-    console.error('页面URL:', window.location.href);
-    console.error('targetFieldId值:', targetFieldId && targetFieldId.value);
-    console.error('recordId值:', recordId && recordId.value);
-    console.error('allFields值:', allFields);
-    console.error('allFields.value值:', allFields && allFields.value);
-
-    // 如果是length错误，特别处理
-    if (event.error.message && event.error.message.includes('Cannot read properties of undefined (reading \'length\')')) {
-      // 尝试确定哪个变量导致了错误
-      let variableInfo = '';
-      if (!allFields || !allFields.value) {
-        variableInfo = '可能原因: allFields或allFields.value未定义';
-      } else if (!Array.isArray(allFields.value)) {
-        variableInfo = '可能原因: allFields.value不是数组';
-      }
-
-      alert(`捕获到length错误: ${event.error.message}\n发生在文件: ${event.filename}\n行号: ${event.lineno}\n${variableInfo}\n\n详细信息请查看控制台`);
-    }
-  });
+  // 导入工具函数
+  import { setupGlobalErrorHandler } from '@/utils/errorHandler';
+  import { imageCache } from '@/utils/imageCache';
+  
+  // 设置全局错误处理
+  setupGlobalErrorHandler();
 
 
 

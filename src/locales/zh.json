@@ -7,6 +7,10 @@
     "image_preview": "图片预览",
     "watermark_settings": "水印设置",
     "watermark_text": "水印文本",
+    "watermark_source": "水印来源",
+    "watermark_field": "水印字段",
+    "custom_text": "自定义文本",
+    "select_field": "选择字段",
     "font": "字体",
     "font_size": "字体大小",
     "color": "颜色",
@@ -21,11 +25,28 @@
     "horizontal_position": "横向位置",
     "vertical_position": "纵向位置",
     "target_field": "目标字段",
-    "save_watermarked_image": "保存水印图片"
+    "save_watermarked_image": "保存水印图片",
+    "preview_placeholder": "请选择图片进行水印处理"
   },
   "placeholder": {
     "base": "请选择数据表",
     "view": "请选择视图",
-    "field": "请选择字段"
+    "field": "请选择字段",
+    "watermark_text": "输入水印文本",
+    "select_watermark_field": "-- 选择字段 --"
+  },
+  "message": {
+    "save_success": "水印图片保存成功！",
+    "save_failed": "保存失败",
+    "no_target_field": "请选择目标字段",
+    "no_record_selected": "请先在表格中选择一行",
+    "no_watermark_image": "请先生成水印图片",
+    "no_database_id": "数据库ID未定义",
+    "field_type_error": "所选字段不是附件类型",
+    "image_processing_failed": "图片处理失败",
+    "network_error": "网络连接失败，请检查网络设置",
+    "permission_error": "权限不足，请检查插件权限设置",
+    "image_format_error": "图片处理失败，请检查图片格式",
+    "field_operation_error": "字段操作失败，请检查字段类型"
   }
 }
