@@ -10,6 +10,74 @@
   import { bitable } from '@lark-base-open/js-sdk';
   import { ref, onMounted, watch, watchEffect, computed } from 'vue';
 
+  // 增强版全局错误处理器
+  window.addEventListener('error', (event) => {
+    console.error('全局错误捕获:', event.error);
+    console.error('错误堆栈:', event.error.stack);
+    console.error('错误发生在:', event.filename, '行号:', event.lineno);
+    console.error('错误时间:', new Date().toLocaleString());
+    console.error('页面URL:', window.location.href);
+    console.error('targetFieldId值:', targetFieldId && targetFieldId.value);
+    console.error('recordId值:', recordId && recordId.value);
+    console.error('allFields值:', allFields);
+    console.error('allFields.value值:', allFields && allFields.value);
+
+    // 如果是length错误，特别处理
+    if (event.error.message && event.error.message.includes('Cannot read properties of undefined (reading \'length\')')) {
+      // 尝试确定哪个变量导致了错误
+      let variableInfo = '';
+      if (!allFields || !allFields.value) {
+        variableInfo = '可能原因: allFields或allFields.value未定义';
+      } else if (!Array.isArray(allFields.value)) {
+        variableInfo = '可能原因: allFields.value不是数组';
+      }
+
+      alert(`捕获到length错误: ${event.error.message}\n发生在文件: ${event.filename}\n行号: ${event.lineno}\n${variableInfo}\n\n详细信息请查看控制台`);
+    }
+  });
+
+  // 测试函数 - 用于隔离和诊断问题
+  function testForLengthError() {
+    try {
+      console.log('开始测试length错误...');
+      console.log('targetFieldId:', targetFieldId);
+      console.log('targetFieldId.value:', targetFieldId && targetFieldId.value);
+      console.log('recordId:', recordId);
+      console.log('recordId.value:', recordId && recordId.value);
+      console.log('watermarkedImageUrl:', watermarkedImageUrl);
+      console.log('watermarkedImageUrl.value:', watermarkedImageUrl && watermarkedImageUrl.value);
+      console.log('databaseId:', databaseId);
+      console.log('databaseId.value:', databaseId && databaseId.value);
+      console.log('allFields:', allFields);
+      console.log('allFields.value:', allFields && allFields.value);
+
+      // 测试可能导致length错误的操作
+      if (allFields && allFields.value) {
+        console.log('allFields.value.length:', allFields.value.length);
+      } else {
+        console.log('allFields或allFields.value未定义');
+      }
+
+      if (watermarkedImageUrl && watermarkedImageUrl.value) {
+        console.log('watermarkedImageUrl.value.length:', watermarkedImageUrl.value.length);
+      } else {
+        console.log('watermarkedImageUrl或watermarkedImageUrl.value未定义');
+      }
+
+      // 模拟保存操作的核心步骤
+      if (allFields && allFields.value && Array.isArray(allFields.value)) {
+        const selectedField = allFields.value.find(field => field.id === targetFieldId.value);
+        console.log('找到选中的字段:', selectedField);
+      }
+
+      console.log('测试完成');
+      alert('测试完成，请查看控制台输出');
+    } catch (error) {
+      console.error('测试中捕获到错误:', error);
+      alert(`测试失败: ${error.message}\n\n详细信息请查看控制台`);
+    }
+  }
+
   // 国际化
   import { useI18n } from 'vue-i18n';
   const { t, locale } = useI18n();
@@ -42,65 +110,263 @@
   // 水印相关状态
   const watermarkText = ref('水印文本');
   const watermarkFont = ref('Arial');
-  const watermarkSize = ref(24);
-  const watermarkColor = ref('#000000');
+  const watermarkSize = ref(48); // 减小默认水印大小
+  const watermarkColor = ref('#FF0000');
   const watermarkOpacity = ref(0.5);
   const watermarkPosition = ref('center'); // center, top-left, top-right, bottom-left, bottom-right, custom
   const watermarkX = ref(50); // 横向位置(%)
   const watermarkY = ref(50); // 纵向位置(%)
   const watermarkedImageUrl = ref('');
+  const watermarkPreviewUrl = ref(''); // 添加水印预览URL
 
-  // 计算水印位置样式
-  const watermarkPositionStyle = computed(() => {
-    if (watermarkPosition.value === 'custom') {
-      return { 
-        top: `${watermarkY.value}%`, 
-        left: `${watermarkX.value}%`, 
-        transform: 'translate(-50%, -50%)'
-      };
-    } else {
-      switch(watermarkPosition.value) {
-        case 'top-left': return { top: '10px', left: '10px' };
-        case 'top-right': return { top: '10px', right: '10px' };
-        case 'bottom-left': return { bottom: '10px', left: '10px' };
-        case 'bottom-right': return { bottom: '10px', right: '10px' };
-        default: return { top: '50%', left: '50%', transform: 'translate(-50%, -50%)' };
+  // 目标字段相关状态
+  const targetFieldId = ref('');
+  const targetFieldList = ref([]);
+  const allFields = ref([]); // 存储所有字段信息，供验证使用
+  const saveLogs = ref([]); // 存储保存操作的日志信息
+
+  // 获取所有字段列表
+  async function getTargetFields() {
+    if (databaseId.value && viewId.value) {
+      try {
+        const table = await base.getTable(databaseId.value);
+        const view = await table.getViewById(viewId.value);
+        const fields = await view.getFieldMetaList();
+        
+        // 保存所有字段信息，供后续验证使用
+        allFields.value = fields;
+        
+        // 显示所有字段供用户选择
+        targetFieldList.value = fields;
+        console.log('获取到的字段数量:', fields.length);
+      } catch (error) {
+        console.error('获取字段列表失败:', error);
       }
     }
-  });
+  }
+
+  // 刷新字段列表
+  async function refreshFields() {
+    alert('正在刷新字段列表...');
+    await getTargetFields();
+    alert(`刷新完成，共找到 ${targetFieldList.length} 个字段`);
+  }
+
+  // 保存带水印的图片到指定字段
+  async function saveWatermarkedImage() {
+    try {
+      console.log('===== 保存开始 =====', new Date().toISOString());
+      addSaveLog('开始保存带水印的图片...');
+
+      // 基本验证
+      if (!targetFieldId?.value) {
+        alert('请选择目标字段');
+        return;
+      }
+      if (!recordId?.value) {
+        alert('请先在表格中选择一行');
+        return;
+      }
+      if (!watermarkedImageUrl?.value) {
+        alert('请先生成水印图片');
+        return;
+      }
+      if (!databaseId?.value) {
+        alert('数据库ID未定义');
+        return;
+      }
+
+      addSaveLog('开始转换图片为Blob...');
+      
+      // 检查水印图片URL是否有效
+      if (!watermarkedImageUrl.value || !watermarkedImageUrl.value.startsWith('data:image/')) {
+        throw new Error('水印图片URL无效，请重新生成水印');
+      }
+      
+      console.log('水印图片URL长度:', watermarkedImageUrl.value.length);
+      console.log('水印图片URL前缀:', watermarkedImageUrl.value.substring(0, 50));
+      
+      // 转换图片为Blob - 使用更安全的方法
+      const dataURLToBlob = (dataURL) => {
+        try {
+          // 验证data URL格式
+          if (!dataURL.includes(',')) {
+            throw new Error('无效的data URL格式');
+          }
+          
+          const arr = dataURL.split(',');
+          const mimeMatch = arr[0].match(/:(.*?);/);
+          if (!mimeMatch) {
+            throw new Error('无法解析MIME类型');
+          }
+          
+          const mime = mimeMatch[1];
+          const bstr = atob(arr[1]);
+          const u8arr = new Uint8Array(bstr.length);
+          
+          for (let i = 0; i < bstr.length; i++) {
+            u8arr[i] = bstr.charCodeAt(i);
+          }
+          
+          const blob = new Blob([u8arr], { type: mime });
+          console.log('Blob创建详情:', {
+            size: blob.size,
+            type: blob.type,
+            mime: mime,
+            dataLength: arr[1].length
+          });
+          
+          return blob;
+        } catch (error) {
+          console.error('Blob转换错误:', error);
+          throw new Error(`Blob转换失败: ${error.message}`);
+        }
+      };
+
+      const blob = dataURLToBlob(watermarkedImageUrl.value);
+      if (!blob || blob.size === 0) {
+        throw new Error('Blob转换失败或文件为空');
+      }
+      
+      addSaveLog(`Blob转换成功，大小: ${Math.round(blob.size/1024)}KB`);
+      console.log('Blob详情:', { size: blob.size, type: blob.type });
+
+      // 获取表格和字段
+      addSaveLog('获取表格和字段...');
+      const table = await base.getTable(databaseId.value);
+      const attachmentField = await table.getFieldById(targetFieldId.value);
+      
+      if (!attachmentField) {
+        throw new Error('无法获取目标字段');
+      }
+      
+      addSaveLog(`字段获取成功: ${attachmentField.name || '未知字段'}`);
+      console.log('字段信息:', { id: attachmentField.id, type: attachmentField.type, name: attachmentField.name });
+
+      // 检查字段类型
+      const isAttachmentType = attachmentField.type === 'attachment' || attachmentField.type === 17 || attachmentField.type === 11;
+      if (!isAttachmentType) {
+        alert(`所选字段不是附件类型，当前类型: ${attachmentField.type}`);
+        return;
+      }
+
+      // 使用附件字段的setValue方法直接保存
+      addSaveLog('开始使用附件字段的setValue方法保存...');
+      
+      // 验证Blob在上传前是否有效
+      if (!blob || blob.size === 0) {
+        throw new Error('Blob无效，无法上传');
+      }
+      
+      console.log('上传前Blob验证:', {
+        size: blob.size,
+        type: blob.type,
+        isValid: blob instanceof Blob
+      });
+
+      // 将Blob转换为File对象
+      const file = new File([blob], `watermarked_${Date.now()}.png`, { 
+        type: blob.type || 'image/png' 
+      });
+      
+      console.log('File对象详情:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified
+      });
+
+      // 直接使用附件字段的setValue方法，让SDK处理文件上传
+      const result = await attachmentField.setValue(recordId.value, file);
+
+      if (result) {
+        addSaveLog('保存成功！', 'success');
+        alert('水印图片保存成功！');
+        
+        // 验证保存结果
+        setTimeout(async () => {
+          try {
+            const savedValue = await attachmentField.getValue(recordId.value);
+            console.log('保存后的附件值:', savedValue);
+            if (savedValue && Array.isArray(savedValue) && savedValue.length > 0) {
+              addSaveLog('附件保存验证成功', 'success');
+            } else {
+              addSaveLog('附件保存验证失败', 'error');
+            }
+          } catch (verifyError) {
+            console.error('验证保存结果失败:', verifyError);
+            addSaveLog('验证保存结果失败', 'error');
+          }
+        }, 2000);
+        
+      } else {
+        throw new Error('保存失败，返回false');
+      }
+
+    } catch (error) {
+      console.error('保存失败:', error);
+      addSaveLog(`保存失败: ${error.message}`, 'error');
+      alert(`保存失败: ${error.message}`);
+    } finally {
+      console.log('===== 保存结束 =====', new Date().toISOString());
+    }
+  }
+
+
+  // 添加保存日志的辅助函数
+  function addSaveLog(message, type = 'info') {
+    const timestamp = new Date().toLocaleTimeString();
+    saveLogs.value.push({
+      timestamp,
+      message,
+      type
+    });
+  }
+
+  // 监听数据表和视图变化，更新目标字段列表
+  watch([databaseId, viewId], getTargetFields);
 
   // 添加水印到图片
   function addWatermarkToImage(imgUrl) {
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
+      if (!imgUrl) {
+        reject(new Error('图片URL为空'));
+        return;
+      }
+
       const img = new Image();
       img.crossOrigin = 'anonymous';
+      
       img.onload = function() {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        try {
+          console.log('图片加载成功:', { width: img.width, height: img.height });
+          
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
 
-        // 设置canvas尺寸与图片一致
-        canvas.width = img.width;
-        canvas.height = img.height;
+          // 设置canvas尺寸与图片一致
+          canvas.width = img.width;
+          canvas.height = img.height;
 
-        // 绘制原图
-        ctx.drawImage(img, 0, 0);
+          // 绘制原图
+          ctx.drawImage(img, 0, 0);
 
-        // 设置水印样式
-        ctx.font = `${watermarkSize.value}px ${watermarkFont.value}`;
-        ctx.fillStyle = watermarkColor.value;
-        ctx.globalAlpha = watermarkOpacity.value;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+          // 设置水印样式
+          // 限制水印大小不超过图片宽度的20%
+          const maxWatermarkSize = Math.min(watermarkSize.value, img.width * 0.2);
+          ctx.font = `${maxWatermarkSize}px ${watermarkFont.value}`;
+          ctx.fillStyle = watermarkColor.value;
+          ctx.globalAlpha = watermarkOpacity.value;
 
-        // 计算水印位置
-        let x, y;
-        if (watermarkPosition.value === 'custom') {
-          x = (watermarkX.value / 100) * canvas.width;
-          y = (watermarkY.value / 100) * canvas.height;
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-        } else {
+          // 计算水印位置和样式
+          let x, y;
           switch(watermarkPosition.value) {
+            case 'custom':
+              x = (watermarkX.value / 100) * canvas.width;
+              y = (watermarkY.value / 100) * canvas.height;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              break;
             case 'top-left':
               x = 20;
               y = 20;
@@ -128,15 +394,40 @@
             default:
               x = canvas.width / 2;
               y = canvas.height / 2;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
           }
+
+          // 绘制水印
+          ctx.fillText(watermarkText.value, x, y);
+
+          // 返回带水印的图片URL
+          const dataUrl = canvas.toDataURL('image/png');
+          
+          // 验证生成的data URL
+          if (!dataUrl || !dataUrl.startsWith('data:image/png;base64,')) {
+            throw new Error('生成的data URL格式无效');
+          }
+          
+          console.log('水印图片生成成功:', {
+            dataUrlLength: dataUrl.length,
+            startsWithData: dataUrl.startsWith('data:image/png;base64,')
+          });
+          
+          // 更新预览URL
+          watermarkPreviewUrl.value = dataUrl;
+          resolve(dataUrl);
+        } catch (error) {
+          console.error('水印生成错误:', error);
+          reject(error);
         }
-
-        // 绘制水印
-        ctx.fillText(watermarkText.value, x, y);
-
-        // 返回带水印的图片URL
-        resolve(canvas.toDataURL('image/png'));
       };
+      
+      img.onerror = function() {
+        console.error('图片加载失败:', imgUrl);
+        reject(new Error('图片加载失败'));
+      };
+      
       img.src = imgUrl;
     });
   }
@@ -157,6 +448,8 @@
 
   onMounted(async () => {
     databaseList.value = await base.getTableMetaList();
+    // 初始化目标字段列表
+    await getTargetFields();
   });
 
   // 切换数据表, 默认选择第一个视图
@@ -400,14 +693,52 @@
       <!-- 预览区域 -->
       <div class="preview-container">
         <img :src="watermarkedImageUrl || imageUrl" alt="预览图片" class="preview-image" />
-        <div v-if="watermarkText" :style="watermarkPositionStyle" class="watermark-preview">
-          {{ watermarkText }}
-        </div>
       </div>
-      
+
+      <!-- 目标字段选择和保存按钮 -->
+      <div class="setting-item" style="margin-top: 20px;">
+        <label>{{ $t('label.target_field') }}:</label>
+        <select v-model="targetFieldId">
+          <option value="">-- {{ $t('placeholder.field') }} --</option>
+          <option v-for="field in targetFieldList" :key="field.id" :value="field.id">{{ field.name }}</option>
+        </select>
+      </div>
+      <button @click="saveWatermarkedImage" class="save-button">{{ $t('label.save_watermarked_image') }}</button>
+
+    <!-- 测试按钮 -->
+    <button class="test-btn" @click="testForLengthError">
+      测试长度错误
+    </button>
+
       <div class="debug-info">
         <p>图片URL: {{ imageUrl }}</p>
         <p>是否为图片附件: {{ isImageAttachment }}</p>
+        <p>目标字段ID: {{ targetFieldId }}</p>
+        <h4>字段调试信息</h4>
+        <p>数据库ID: {{ databaseId.value }}</p>
+        <p>视图ID: {{ viewId.value }}</p>
+        <p>记录ID: {{ recordId }}</p>
+        <p>目标字段列表长度: {{ targetFieldList.length }}</p>
+        <div v-if="targetFieldList.length > 0">
+          <p>筛选出的字段列表:</p>
+          <ul>
+            <li v-for="field in targetFieldList" :key="field.id">
+              {{ field.name }} (ID: {{ field.id }}, 类型: {{ field.type }})
+            </li>
+          </ul>
+        </div>
+        <div v-else>
+          <p>未找到附件字段，请检查字段筛选条件</p>
+        </div>
+        <button @click="refreshFields" class="debug-button">刷新字段列表</button>
+
+        <h4>保存日志</h4>
+        <div class="save-log" v-if="saveLogs && saveLogs.length > 0">
+          <p v-for="log in saveLogs" :key="log.timestamp" :class="log.type === 'error' ? 'error-log' : ''">
+            {{ log.timestamp }}: {{ log.message }}
+          </p>
+        </div>
+        <p v-else>暂无保存记录</p>
       </div>
     </div>
     <div v-else-if="currentFieldId && currentFieldId.value">
@@ -522,14 +853,66 @@
   display: inline-block;
 }
 
-.watermark-preview {
-  position: absolute;
-  font-size: 24px;
-  color: #000;
-  opacity: 0.5;
-  pointer-events: none;
-  white-space: nowrap;
+.save-button {
+  margin-top: 15px;
+  padding: 8px 16px;
+  background-color: rgb(20, 86, 240);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
 }
+
+.save-button:hover {
+  background-color: rgb(15, 70, 200);
+}
+
+.test-btn {
+  margin-top: 10px;
+  margin-left: 10px;
+  padding: 8px 16px;
+  background-color: #ff7a45;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.test-btn:hover {
+  background-color: #ff9a6b;
+}
+
+.debug-button {
+  margin-top: 10px;
+  padding: 6px 12px;
+  background-color: #f0ad4e;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.debug-button:hover {
+  background-color: #ec971f;
+}
+
+.save-log {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #f5f5f5;
+  border-radius: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.error-log {
+  color: #f56c6c;
+  font-weight: bold;
+}
+
+
 
 .image-label {
   font-size: 14px;

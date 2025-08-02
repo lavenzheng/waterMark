@@ -19,7 +19,9 @@
     "bottom_right": "右下",
     "custom": "自定义",
     "horizontal_position": "横向位置",
-    "vertical_position": "纵向位置"
+    "vertical_position": "纵向位置",
+    "target_field": "目标字段",
+    "save_watermarked_image": "保存水印图片"
   },
   "placeholder": {
     "base": "请选择数据表",

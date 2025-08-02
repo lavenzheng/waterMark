@@ -19,7 +19,9 @@
     "bottom_right": "Bottom Right",
     "custom": "Custom",
     "horizontal_position": "Horizontal Position",
-    "vertical_position": "Vertical Position"
+    "vertical_position": "Vertical Position",
+    "target_field": "Target Field",
+    "save_watermarked_image": "Save Watermarked Image"
   },
   "placeholder": {
     "base": "Select a table",
