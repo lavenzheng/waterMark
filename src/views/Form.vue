@@ -78,6 +78,12 @@
   const watermarkY = ref(35); // 纵向位置(%)
   const watermarkedImageUrl = ref('');
   const watermarkPreviewUrl = ref(''); // 添加水印预览URL
+  
+  // 水印字段相关状态
+  const watermarkFieldId = ref(''); // 选中的水印字段ID
+  const watermarkFieldList = ref([]); // 水印字段列表
+  const watermarkFieldValue = ref(''); // 水印字段的值
+  const watermarkSource = ref('custom'); // 'custom' 或 'field'，表示水印来源
 
   // 目标字段相关状态
   const targetFieldId = ref('');
@@ -106,11 +112,79 @@
     }
   }
 
+  // 获取水印字段列表
+  async function getWatermarkFields() {
+    if (databaseId.value && viewId.value) {
+      try {
+        const table = await base.getTable(databaseId.value);
+        const view = await table.getViewById(viewId.value);
+        const fields = await view.getFieldMetaList();
+        
+        // 显示文本类型字段供水印选择
+        watermarkFieldList.value = fields.filter(field => field.type === 1); // 1 是文本字段类型
+        console.log('水印字段数量:', watermarkFieldList.value.length);
+      } catch (error) {
+        console.error('获取水印字段列表失败:', error);
+      }
+    }
+  }
+
   // 刷新字段列表
   async function refreshFields() {
     alert('正在刷新字段列表...');
     await getTargetFields();
     alert(`刷新完成，共找到 ${targetFieldList.length} 个字段`);
+  }
+
+  // 获取水印字段的值
+  async function getWatermarkFieldValue() {
+    if (watermarkFieldId.value && recordId.value) {
+      try {
+        console.log('开始获取水印字段值:', {
+          fieldId: watermarkFieldId.value,
+          recordId: recordId.value,
+          databaseId: databaseId.value
+        });
+        
+        const table = await base.getTable(databaseId.value);
+        const field = await table.getFieldById(watermarkFieldId.value);
+        const cell = await field.getCell(recordId.value);
+        const value = await cell.getValue();
+        
+        // 解析字段值，提取文本内容
+        let textValue = '';
+        if (value) {
+          if (Array.isArray(value)) {
+            // 如果是数组格式，提取第一个元素的text属性
+            if (value.length > 0 && value[0].text) {
+              textValue = value[0].text;
+            }
+          } else if (typeof value === 'object' && value.text) {
+            // 如果是对象格式，直接提取text属性
+            textValue = value.text;
+          } else if (typeof value === 'string') {
+            // 如果是字符串，直接使用
+            textValue = value;
+          }
+        }
+        
+        watermarkFieldValue.value = textValue;
+        console.log('水印字段值解析成功:', {
+          originalValue: value,
+          extractedText: textValue
+        });
+        
+        // 如果当前有图片，立即更新水印预览（不等待）
+        if (imageUrl.value) {
+          addWatermarkToImage(imageUrl.value).then(result => {
+            watermarkedImageUrl.value = result;
+          });
+        }
+      } catch (error) {
+        console.error('获取水印字段值失败:', error);
+        watermarkFieldValue.value = '';
+      }
+    }
   }
 
   // 保存带水印的图片到指定字段
@@ -287,8 +361,11 @@
     });
   }
 
-  // 监听数据表和视图变化，更新目标字段列表
-  watch([databaseId, viewId], getTargetFields);
+  // 监听数据表和视图变化，更新字段列表
+  watch([databaseId, viewId], async () => {
+    await getTargetFields();
+    await getWatermarkFields();
+  });
 
   // 添加水印到图片 - 生成预览版本
   function addWatermarkToImage(imgUrl) {
@@ -384,8 +461,14 @@
               ctx.textBaseline = 'middle';
           }
 
+          // 获取水印文本
+          let textToDraw = watermarkText.value;
+          if (watermarkSource.value === 'field' && watermarkFieldValue.value) {
+            textToDraw = watermarkFieldValue.value;
+          }
+          
           // 绘制水印
-          ctx.fillText(watermarkText.value, x, y);
+          ctx.fillText(textToDraw, x, y);
 
           // 返回带水印的图片URL（预览版本）
           const dataUrl = canvas.toDataURL('image/png');
@@ -490,8 +573,14 @@
               ctx.textBaseline = 'middle';
           }
 
+          // 获取水印文本
+          let textToDraw = watermarkText.value;
+          if (watermarkSource.value === 'field' && watermarkFieldValue.value) {
+            textToDraw = watermarkFieldValue.value;
+          }
+          
           // 绘制水印
-          ctx.fillText(watermarkText.value, x, y);
+          ctx.fillText(textToDraw, x, y);
 
           // 返回高质量带水印的图片URL - 使用JPEG格式减小文件大小
           const dataUrl = canvas.toDataURL('image/jpeg', 0.95); // 95%质量，平衡文件大小和质量
@@ -525,21 +614,37 @@
   // 监听图片URL变化，添加水印
   watch(imageUrl, async (newVal) => {
     if (newVal) {
+      // 如果当前选择了水印字段，立即重新获取字段值（不等待）
+      if (watermarkSource.value === 'field' && watermarkFieldId.value) {
+        getWatermarkFieldValue(); // 移除 await，让字段值获取在后台进行
+      }
+      // 立即开始生成水印预览
       watermarkedImageUrl.value = await addWatermarkToImage(newVal);
     }
   });
 
-  // 监听水印设置变化，重新添加水印
-  watch([watermarkText, watermarkFont, watermarkSize, watermarkColor, watermarkOpacity, watermarkPosition, watermarkX, watermarkY], async () => {
+  // 防抖函数
+  let watermarkUpdateTimer = null;
+  
+  // 监听水印设置变化，重新添加水印（带防抖）
+  watch([watermarkText, watermarkFont, watermarkSize, watermarkColor, watermarkOpacity, watermarkPosition, watermarkX, watermarkY, watermarkSource, watermarkFieldValue], async () => {
     if (imageUrl.value) {
-      watermarkedImageUrl.value = await addWatermarkToImage(imageUrl.value);
+      // 清除之前的定时器
+      if (watermarkUpdateTimer) {
+        clearTimeout(watermarkUpdateTimer);
+      }
+      // 设置新的定时器，延迟100ms执行
+      watermarkUpdateTimer = setTimeout(async () => {
+        watermarkedImageUrl.value = await addWatermarkToImage(imageUrl.value);
+      }, 100);
     }
   });
 
   onMounted(async () => {
     databaseList.value = await base.getTableMetaList();
-    // 初始化目标字段列表
+    // 初始化目标字段列表和水印字段列表
     await getTargetFields();
+    await getWatermarkFields();
   });
 
   // 切换数据表, 默认选择第一个视图
@@ -674,15 +779,41 @@
 <template>
   <div class="main">
     <!-- 图片附件显示区域 -->
-    <div v-if="isImageAttachment" class="image-container">
+    <div class="image-container">
       
       <!-- 水印设置区域 -->
       <div class="watermark-settings">
         <h4>{{ $t('label.watermark_settings') }}</h4>
         <div class="setting-item">
-          <label>{{ $t('label.watermark_text') }}:</label>
+          <label>水印来源:</label>
+          <select v-model="watermarkSource">
+            <option value="custom">自定义文本</option>
+            <option value="field">选择字段</option>
+          </select>
+        </div>
+        
+        <div v-if="watermarkSource === 'custom'" class="setting-item">
+          <label>水印文本:</label>
           <input v-model="watermarkText" placeholder="输入水印文本" />
         </div>
+        
+        <div v-if="watermarkSource === 'field'" class="setting-item">
+          <label>水印字段:</label>
+          <select v-model="watermarkFieldId" @change="getWatermarkFieldValue">
+            <option value="">-- 选择字段 --</option>
+            <option v-for="field in watermarkFieldList" :key="field.id" :value="field.id">{{ field.name }}</option>
+          </select>
+        </div>
+        
+        <!-- 目标字段选择 -->
+        <div class="setting-item">
+          <label>{{ $t('label.target_field') }}:</label>
+          <select v-model="targetFieldId">
+            <option value="">-- {{ $t('placeholder.field') }} --</option>
+            <option v-for="field in targetFieldList" :key="field.id" :value="field.id">{{ field.name }}</option>
+          </select>
+        </div>
+        
         <div class="setting-item">
           <label>{{ $t('label.font') }}:</label>
           <select v-model="watermarkFont">
@@ -730,17 +861,13 @@
       
       <!-- 预览区域 -->
       <div class="preview-container">
-        <img :src="watermarkedImageUrl || imageUrl" alt="预览图片" class="preview-image" />
+        <img v-if="watermarkedImageUrl || imageUrl" :src="watermarkedImageUrl || imageUrl" alt="预览图片" class="preview-image" />
+        <div v-else class="preview-placeholder">
+          <p>请选择图片进行水印处理</p>
+        </div>
       </div>
 
-      <!-- 目标字段选择和保存按钮 -->
-      <div class="setting-item" style="margin-top: 20px;">
-        <label>{{ $t('label.target_field') }}:</label>
-        <select v-model="targetFieldId">
-          <option value="">-- {{ $t('placeholder.field') }} --</option>
-          <option v-for="field in targetFieldList" :key="field.id" :value="field.id">{{ field.name }}</option>
-        </select>
-      </div>
+      <!-- 保存按钮 -->
       <button @click="saveWatermarkedImage" class="save-button">{{ $t('label.save_watermarked_image') }}</button>
 
       <!-- 调试输出信息 - 暂时隐藏，调试时可取消注释 -->
@@ -776,12 +903,6 @@
         <p v-else>暂无保存记录</p>
       </div>
       -->
-    </div>
-    <div v-else-if="currentFieldId && currentFieldId.value">
-      <div class="debug-info">
-        <p>字段类型: {{ fieldType.value }}</p>
-        <p>是否为附件字段: {{ isAttachmentField.value }}</p>
-      </div>
     </div>
   </div>
 </template>
@@ -833,13 +954,13 @@
   }
 
   .image-container {
-  margin-top: 20px;
+  margin-top: 1px;
   width: 90%;
 }
 
 .watermark-settings {
-  margin-bottom: 15px;
-  padding: 12px;
+  margin-bottom: 10px;
+  padding: 8px;
   background-color: #f9f9f9;
   border-radius: 4px;
   border: 1px solid #e5e7eb;
@@ -847,7 +968,7 @@
 
 .watermark-settings h4 {
   margin-top: 0;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
   font-size: 16px;
   color: #333;
 }
@@ -855,7 +976,7 @@
 .setting-item {
   display: flex;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
 }
 
 .setting-item label {
@@ -887,6 +1008,23 @@
 .preview-container {
   position: relative;
   display: inline-block;
+}
+
+.preview-placeholder {
+  width: 100%;
+  height: 200px;
+  border: 2px dashed #ddd;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f9f9f9;
+}
+
+.preview-placeholder p {
+  color: #999;
+  font-size: 14px;
+  margin: 0;
 }
 
 .save-button {
