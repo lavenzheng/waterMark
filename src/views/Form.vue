@@ -36,47 +36,7 @@
     }
   });
 
-  // 测试函数 - 用于隔离和诊断问题
-  function testForLengthError() {
-    try {
-      console.log('开始测试length错误...');
-      console.log('targetFieldId:', targetFieldId);
-      console.log('targetFieldId.value:', targetFieldId && targetFieldId.value);
-      console.log('recordId:', recordId);
-      console.log('recordId.value:', recordId && recordId.value);
-      console.log('watermarkedImageUrl:', watermarkedImageUrl);
-      console.log('watermarkedImageUrl.value:', watermarkedImageUrl && watermarkedImageUrl.value);
-      console.log('databaseId:', databaseId);
-      console.log('databaseId.value:', databaseId && databaseId.value);
-      console.log('allFields:', allFields);
-      console.log('allFields.value:', allFields && allFields.value);
 
-      // 测试可能导致length错误的操作
-      if (allFields && allFields.value) {
-        console.log('allFields.value.length:', allFields.value.length);
-      } else {
-        console.log('allFields或allFields.value未定义');
-      }
-
-      if (watermarkedImageUrl && watermarkedImageUrl.value) {
-        console.log('watermarkedImageUrl.value.length:', watermarkedImageUrl.value.length);
-      } else {
-        console.log('watermarkedImageUrl或watermarkedImageUrl.value未定义');
-      }
-
-      // 模拟保存操作的核心步骤
-      if (allFields && allFields.value && Array.isArray(allFields.value)) {
-        const selectedField = allFields.value.find(field => field.id === targetFieldId.value);
-        console.log('找到选中的字段:', selectedField);
-      }
-
-      console.log('测试完成');
-      alert('测试完成，请查看控制台输出');
-    } catch (error) {
-      console.error('测试中捕获到错误:', error);
-      alert(`测试失败: ${error.message}\n\n详细信息请查看控制台`);
-    }
-  }
 
   // 国际化
   import { useI18n } from 'vue-i18n';
@@ -110,12 +70,12 @@
   // 水印相关状态
   const watermarkText = ref('水印文本');
   const watermarkFont = ref('Arial');
-  const watermarkSize = ref(48); // 减小默认水印大小
-  const watermarkColor = ref('#FF0000');
-  const watermarkOpacity = ref(0.5);
-  const watermarkPosition = ref('center'); // center, top-left, top-right, bottom-left, bottom-right, custom
+  const watermarkSize = ref(240);   // 默认水印文字大小
+  const watermarkColor = ref('#FF0000');  //默认颜色
+  const watermarkOpacity = ref(1);  //默认透明度
+  const watermarkPosition = ref('custom'); // center, top-left, top-right, bottom-left, bottom-right, custom
   const watermarkX = ref(50); // 横向位置(%)
-  const watermarkY = ref(50); // 纵向位置(%)
+  const watermarkY = ref(35); // 纵向位置(%)
   const watermarkedImageUrl = ref('');
   const watermarkPreviewUrl = ref(''); // 添加水印预览URL
 
@@ -136,9 +96,10 @@
         // 保存所有字段信息，供后续验证使用
         allFields.value = fields;
         
-        // 显示所有字段供用户选择
-        targetFieldList.value = fields;
+        // 只显示附件字段供用户选择
+        targetFieldList.value = fields.filter(field => field.type === 17); // 17 是附件字段类型
         console.log('获取到的字段数量:', fields.length);
+        console.log('附件字段数量:', targetFieldList.value.length);
       } catch (error) {
         console.error('获取字段列表失败:', error);
       }
@@ -178,15 +139,19 @@
 
       addSaveLog('开始转换图片为Blob...');
       
-      // 检查水印图片URL是否有效
-      if (!watermarkedImageUrl.value || !watermarkedImageUrl.value.startsWith('data:image/')) {
-        throw new Error('水印图片URL无效，请重新生成水印');
+      // 生成高质量水印图片用于保存
+      addSaveLog('生成高质量水印图片...');
+      const highQualityImageUrl = await generateHighQualityWatermarkedImage(imageUrl.value);
+      
+      // 检查高质量水印图片URL是否有效
+      if (!highQualityImageUrl || !highQualityImageUrl.startsWith('data:image/')) {
+        throw new Error('高质量水印图片URL无效，请重新生成水印');
       }
       
-      console.log('水印图片URL长度:', watermarkedImageUrl.value.length);
-      console.log('水印图片URL前缀:', watermarkedImageUrl.value.substring(0, 50));
+      console.log('高质量水印图片URL长度:', highQualityImageUrl.length);
+      console.log('高质量水印图片URL前缀:', highQualityImageUrl.substring(0, 50));
       
-      // 转换图片为Blob - 使用更安全的方法
+      // 转换高质量图片为Blob - 使用更安全的方法
       const dataURLToBlob = (dataURL) => {
         try {
           // 验证data URL格式
@@ -223,7 +188,7 @@
         }
       };
 
-      const blob = dataURLToBlob(watermarkedImageUrl.value);
+      const blob = dataURLToBlob(highQualityImageUrl);
       if (!blob || blob.size === 0) {
         throw new Error('Blob转换失败或文件为空');
       }
@@ -265,8 +230,8 @@
       });
 
       // 将Blob转换为File对象
-      const file = new File([blob], `watermarked_${Date.now()}.png`, { 
-        type: blob.type || 'image/png' 
+      const file = new File([blob], `watermarked_${Date.now()}.jpg`, { 
+        type: blob.type || 'image/jpeg' 
       });
       
       console.log('File对象详情:', {
@@ -281,7 +246,6 @@
 
       if (result) {
         addSaveLog('保存成功！', 'success');
-        alert('水印图片保存成功！');
         
         // 验证保存结果
         setTimeout(async () => {
@@ -326,7 +290,7 @@
   // 监听数据表和视图变化，更新目标字段列表
   watch([databaseId, viewId], getTargetFields);
 
-  // 添加水印到图片
+  // 添加水印到图片 - 生成预览版本
   function addWatermarkToImage(imgUrl) {
     return new Promise((resolve, reject) => {
       if (!imgUrl) {
@@ -344,56 +308,78 @@
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
 
-          // 设置canvas尺寸与图片一致
-          canvas.width = img.width;
-          canvas.height = img.height;
+          // 计算预览用的canvas尺寸，限制最大尺寸
+          const maxWidth = 800; // 最大宽度
+          const maxHeight = 600; // 最大高度
+          
+          let canvasWidth = img.width;
+          let canvasHeight = img.height;
+          
+          // 如果图片尺寸超过限制，按比例缩放
+          if (canvasWidth > maxWidth || canvasHeight > maxHeight) {
+            const ratio = Math.min(maxWidth / canvasWidth, maxHeight / canvasHeight);
+            canvasWidth = Math.floor(canvasWidth * ratio);
+            canvasHeight = Math.floor(canvasHeight * ratio);
+          }
+          
+          canvas.width = canvasWidth;
+          canvas.height = canvasHeight;
 
-          // 绘制原图
-          ctx.drawImage(img, 0, 0);
+          // 绘制原图 - 如果尺寸不同，需要缩放绘制
+          if (canvasWidth === img.width && canvasHeight === img.height) {
+            // 尺寸相同，直接绘制
+            ctx.drawImage(img, 0, 0);
+          } else {
+            // 尺寸不同，需要缩放绘制
+            ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
+          }
 
           // 设置水印样式
-          // 限制水印大小不超过图片宽度的20%
-          const maxWatermarkSize = Math.min(watermarkSize.value, img.width * 0.2);
+          // 限制水印大小不超过图片宽度的20%，并考虑缩放比例
+          const scaleRatio = canvasWidth / img.width;
+          const adjustedWatermarkSize = watermarkSize.value * scaleRatio;
+          const maxWatermarkSize = Math.min(adjustedWatermarkSize, canvasWidth * 0.2);
           ctx.font = `${maxWatermarkSize}px ${watermarkFont.value}`;
           ctx.fillStyle = watermarkColor.value;
           ctx.globalAlpha = watermarkOpacity.value;
 
           // 计算水印位置和样式
           let x, y;
+          const padding = Math.max(10, canvasWidth * 0.02); // 动态计算边距
           switch(watermarkPosition.value) {
             case 'custom':
-              x = (watermarkX.value / 100) * canvas.width;
-              y = (watermarkY.value / 100) * canvas.height;
+              x = (watermarkX.value / 100) * canvasWidth;
+              y = (watermarkY.value / 100) * canvasHeight;
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
               break;
             case 'top-left':
-              x = 20;
-              y = 20;
+              x = padding;
+              y = padding;
               ctx.textAlign = 'left';
               ctx.textBaseline = 'top';
               break;
             case 'top-right':
-              x = canvas.width - 20;
-              y = 20;
+              x = canvasWidth - padding;
+              y = padding;
               ctx.textAlign = 'right';
               ctx.textBaseline = 'top';
               break;
             case 'bottom-left':
-              x = 20;
-              y = canvas.height - 20;
+              x = padding;
+              y = canvasHeight - padding;
               ctx.textAlign = 'left';
               ctx.textBaseline = 'bottom';
               break;
             case 'bottom-right':
-              x = canvas.width - 20;
-              y = canvas.height - 20;
+              x = canvasWidth - padding;
+              y = canvasHeight - padding;
               ctx.textAlign = 'right';
               ctx.textBaseline = 'bottom';
               break;
             default:
-              x = canvas.width / 2;
-              y = canvas.height / 2;
+              x = canvasWidth / 2;
+              y = canvasHeight / 2;
               ctx.textAlign = 'center';
               ctx.textBaseline = 'middle';
           }
@@ -401,7 +387,7 @@
           // 绘制水印
           ctx.fillText(watermarkText.value, x, y);
 
-          // 返回带水印的图片URL
+          // 返回带水印的图片URL（预览版本）
           const dataUrl = canvas.toDataURL('image/png');
           
           // 验证生成的data URL
@@ -419,6 +405,110 @@
           resolve(dataUrl);
         } catch (error) {
           console.error('水印生成错误:', error);
+          reject(error);
+        }
+      };
+      
+      img.onerror = function() {
+        console.error('图片加载失败:', imgUrl);
+        reject(new Error('图片加载失败'));
+      };
+      
+      img.src = imgUrl;
+    });
+  }
+
+  // 生成高质量水印图片用于保存
+  function generateHighQualityWatermarkedImage(imgUrl) {
+    return new Promise((resolve, reject) => {
+      if (!imgUrl) {
+        reject(new Error('图片URL为空'));
+        return;
+      }
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      
+      img.onload = function() {
+        try {
+          console.log('生成高质量水印图片:', { width: img.width, height: img.height });
+          
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+
+          // 使用原始图片尺寸，保持最高质量
+          canvas.width = img.width;
+          canvas.height = img.height;
+
+          // 绘制原图
+          ctx.drawImage(img, 0, 0);
+
+          // 设置水印样式 - 使用原始尺寸
+          const maxWatermarkSize = Math.min(watermarkSize.value, img.width * 0.2);
+          ctx.font = `${maxWatermarkSize}px ${watermarkFont.value}`;
+          ctx.fillStyle = watermarkColor.value;
+          ctx.globalAlpha = watermarkOpacity.value;
+
+          // 计算水印位置和样式
+          let x, y;
+          const padding = Math.max(20, img.width * 0.02); // 动态计算边距
+          switch(watermarkPosition.value) {
+            case 'custom':
+              x = (watermarkX.value / 100) * img.width;
+              y = (watermarkY.value / 100) * img.height;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+              break;
+            case 'top-left':
+              x = padding;
+              y = padding;
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'top';
+              break;
+            case 'top-right':
+              x = img.width - padding;
+              y = padding;
+              ctx.textAlign = 'right';
+              ctx.textBaseline = 'top';
+              break;
+            case 'bottom-left':
+              x = padding;
+              y = img.height - padding;
+              ctx.textAlign = 'left';
+              ctx.textBaseline = 'bottom';
+              break;
+            case 'bottom-right':
+              x = img.width - padding;
+              y = img.height - padding;
+              ctx.textAlign = 'right';
+              ctx.textBaseline = 'bottom';
+              break;
+            default:
+              x = img.width / 2;
+              y = img.height / 2;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+          }
+
+          // 绘制水印
+          ctx.fillText(watermarkText.value, x, y);
+
+          // 返回高质量带水印的图片URL - 使用JPEG格式减小文件大小
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.95); // 95%质量，平衡文件大小和质量
+          
+          // 验证生成的data URL
+          if (!dataUrl || !dataUrl.startsWith('data:image/jpeg;base64,')) {
+            throw new Error('生成的data URL格式无效');
+          }
+          
+          console.log('高质量水印图片生成成功:', {
+            dataUrlLength: dataUrl.length,
+            startsWithData: dataUrl.startsWith('data:image/jpeg;base64,')
+          });
+          
+          resolve(dataUrl);
+        } catch (error) {
+          console.error('高质量水印生成错误:', error);
           reject(error);
         }
       };
@@ -583,60 +673,8 @@
 
 <template>
   <div class="main">
-    <div class="label">
-      <div class="text">{{ $t('label.base') }}</div>
-      <el-select
-        v-model="databaseId"
-        :placeholder="$t('placeholder.base')"
-        @change="databaseChange"
-        popper-class="selectStyle"
-      >
-        <el-option
-          v-for="item in databaseList"
-          :key="item.id"
-          :label="item.name"
-          :value="item.id"
-        />
-      </el-select>
-    </div>
-
-    <div class="label">
-      <div class="text">{{ $t('label.view') }}</div>
-      <el-select
-        v-model="viewId"
-        :placeholder="$t('placeholder.view')"
-        popper-class="selectStyle"
-      >
-        <el-option
-          v-for="item in viewList"
-          :key="item.id"
-          :label="item.name"
-          :value="item.id"
-        />
-      </el-select>
-    </div>
-    <div class="label">
-      <div class="text">{{ $t('label.field') }}</div>
-      <el-select
-        v-model="fieldId"
-        :placeholder="$t('placeholder.field')"
-        popper-class="selectStyle"
-      >
-        <el-option
-          v-for="item in fieldList"
-          :key="item.id"
-          :label="item.name"
-          :value="item.id"
-        />
-      </el-select>
-    </div>
-
-    <div>{{ $t('label.current') }}</div>
-    <div class="show-data">{{ currentValue || '暂无数据' }}</div>
-
     <!-- 图片附件显示区域 -->
     <div v-if="isImageAttachment" class="image-container">
-      <div class="image-label">{{ $t('label.image_preview') }}</div>
       
       <!-- 水印设置区域 -->
       <div class="watermark-settings">
@@ -705,11 +743,8 @@
       </div>
       <button @click="saveWatermarkedImage" class="save-button">{{ $t('label.save_watermarked_image') }}</button>
 
-    <!-- 测试按钮 -->
-    <button class="test-btn" @click="testForLengthError">
-      测试长度错误
-    </button>
-
+      <!-- 调试输出信息 - 暂时隐藏，调试时可取消注释 -->
+      <!-- 
       <div class="debug-info">
         <p>图片URL: {{ imageUrl }}</p>
         <p>是否为图片附件: {{ isImageAttachment }}</p>
@@ -740,6 +775,7 @@
         </div>
         <p v-else>暂无保存记录</p>
       </div>
+      -->
     </div>
     <div v-else-if="currentFieldId && currentFieldId.value">
       <div class="debug-info">
@@ -802,8 +838,8 @@
 }
 
 .watermark-settings {
-  margin-bottom: 20px;
-  padding: 15px;
+  margin-bottom: 15px;
+  padding: 12px;
   background-color: #f9f9f9;
   border-radius: 4px;
   border: 1px solid #e5e7eb;
@@ -811,7 +847,7 @@
 
 .watermark-settings h4 {
   margin-top: 0;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
   font-size: 16px;
   color: #333;
 }
@@ -819,7 +855,7 @@
 .setting-item {
   display: flex;
   align-items: center;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .setting-item label {
