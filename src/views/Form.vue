@@ -47,6 +47,11 @@
   const isImageAttachment = ref(false);
   const fieldType = ref('');
   const isAttachmentField = ref(false);
+  
+  // 多张照片相关状态
+  const attachmentImages = ref([]); // 存储所有附件图片信息
+  const currentImageIndex = ref(0); // 当前显示的图片索引
+  const watermarkedImages = ref([]); // 存储所有带水印的图片URL
 
   // 水印相关状态
   const watermarkText = ref('水印文本');
@@ -65,6 +70,8 @@
   const watermarkFieldList = ref([]); // 水印字段列表
   const watermarkFieldValue = ref(''); // 水印字段的值
   const watermarkSource = ref('custom'); // 'custom' 或 'field'，表示水印来源
+  
+
 
   // 目标字段相关状态
   const targetFieldId = ref('');
@@ -183,28 +190,44 @@
         alert('请先在表格中选择一行');
         return;
       }
-      if (!watermarkedImageUrl?.value) {
-        alert('请先生成水印图片');
-        return;
-      }
       if (!databaseId?.value) {
         alert('数据库ID未定义');
         return;
       }
+      
+      // 检查是否有图片需要保存
+      if (attachmentImages.value.length === 0) {
+        alert('没有图片需要保存');
+        return;
+      }
 
-      addSaveLog('开始转换图片为Blob...');
+      addSaveLog('开始批量处理水印图片...');
       
-      // 生成高质量水印图片用于保存
-      addSaveLog('生成高质量水印图片...');
-      const highQualityImageUrl = await generateHighQualityWatermarkedImage(imageUrl.value);
+      // 批量生成高质量水印图片
+      const highQualityImages = [];
+      console.log('开始批量处理，图片数量:', attachmentImages.value.length);
       
-      // 检查高质量水印图片URL是否有效
-      if (!highQualityImageUrl || !highQualityImageUrl.startsWith('data:image/')) {
-        throw new Error('高质量水印图片URL无效，请重新生成水印');
+      for (let i = 0; i < attachmentImages.value.length; i++) {
+        try {
+          addSaveLog(`正在处理第 ${i + 1}/${attachmentImages.value.length} 张图片...`);
+          console.log(`处理第 ${i + 1} 张图片:`, attachmentImages.value[i]);
+          
+          const highQualityImageUrl = await generateHighQualityWatermarkedImage(attachmentImages.value[i].url);
+          
+          // 检查高质量水印图片URL是否有效
+          if (!highQualityImageUrl || !highQualityImageUrl.startsWith('data:image/')) {
+            throw new Error(`第 ${i + 1} 张图片的水印生成失败`);
+          }
+          
+          console.log(`第 ${i + 1} 张图片处理成功，URL长度:`, highQualityImageUrl.length);
+          highQualityImages.push(highQualityImageUrl);
+        } catch (error) {
+          console.error(`第 ${i + 1} 张图片处理失败:`, error);
+          throw new Error(`第 ${i + 1} 张图片处理失败: ${error.message}`);
+        }
       }
       
-      console.log('高质量水印图片URL长度:', highQualityImageUrl.length);
-      console.log('高质量水印图片URL前缀:', highQualityImageUrl.substring(0, 50));
+      addSaveLog('所有水印图片生成完成，开始转换...');
       
       // 转换高质量图片为Blob - 使用更安全的方法
       const dataURLToBlob = (dataURL) => {
@@ -243,13 +266,36 @@
         }
       };
 
-      const blob = dataURLToBlob(highQualityImageUrl);
-      if (!blob || blob.size === 0) {
-        throw new Error('Blob转换失败或文件为空');
-      }
+      // 转换所有图片为Blob
+      const blobs = [];
+      console.log('开始转换Blob，图片数量:', highQualityImages.length);
       
-      addSaveLog(`Blob转换成功，大小: ${Math.round(blob.size/1024)}KB`);
-      console.log('Blob详情:', { size: blob.size, type: blob.type });
+      for (let i = 0; i < highQualityImages.length; i++) {
+        try {
+          console.log(`转换第 ${i + 1} 张图片为Blob...`);
+          const blob = dataURLToBlob(highQualityImages[i]);
+          
+          if (!blob) {
+            throw new Error('Blob转换返回null或undefined');
+          }
+          
+          if (blob.size === 0) {
+            throw new Error('Blob大小为0');
+          }
+          
+          console.log(`第 ${i + 1} 张图片Blob转换成功:`, {
+            size: blob.size,
+            type: blob.type,
+            isValid: blob instanceof Blob
+          });
+          
+          blobs.push(blob);
+          addSaveLog(`第 ${i + 1} 张图片转换成功，大小: ${Math.round(blob.size/1024)}KB`);
+        } catch (error) {
+          console.error(`第 ${i + 1} 张图片转换失败:`, error);
+          throw new Error(`第 ${i + 1} 张图片转换失败: ${error.message}`);
+        }
+      }
 
       // 获取表格和字段
       addSaveLog('获取表格和字段...');
@@ -273,44 +319,79 @@
       // 使用附件字段的setValue方法直接保存
       addSaveLog('开始使用附件字段的setValue方法保存...');
       
-      // 验证Blob在上传前是否有效
-      if (!blob || blob.size === 0) {
-        throw new Error('Blob无效，无法上传');
+      // 验证Blobs在上传前是否有效
+      if (!blobs || blobs.length === 0) {
+        throw new Error('没有有效的Blob数据，无法上传');
       }
       
-      console.log('上传前Blob验证:', {
-        size: blob.size,
-        type: blob.type,
-        isValid: blob instanceof Blob
+      // 验证所有Blob
+      for (let i = 0; i < blobs.length; i++) {
+        if (!blobs[i] || blobs[i].size === 0) {
+          throw new Error(`第 ${i + 1} 张图片的Blob无效`);
+        }
+      }
+      
+      console.log('上传前Blobs验证:', {
+        count: blobs.length,
+        sizes: blobs.map(blob => blob.size),
+        types: blobs.map(blob => blob.type)
       });
 
-      // 将Blob转换为File对象
-      const file = new File([blob], `watermarked_${Date.now()}.jpg`, { 
-        type: blob.type || 'image/jpeg' 
+      // 将所有Blob转换为File对象
+      const files = blobs.map((blob, index) => {
+        const originalName = attachmentImages.value[index].name;
+        const nameWithoutExt = originalName.substring(0, originalName.lastIndexOf('.'));
+        const ext = originalName.substring(originalName.lastIndexOf('.'));
+        return new File([blob], `watermarked_${nameWithoutExt}_${Date.now()}.jpg`, { 
+          type: blob.type || 'image/jpeg' 
+        });
       });
       
-      console.log('File对象详情:', {
+      console.log('File对象详情:', files.map(file => ({
         name: file.name,
         size: file.size,
         type: file.type,
         lastModified: file.lastModified
-      });
+      })));
 
-      // 直接使用附件字段的setValue方法，让SDK处理文件上传
-      const result = await attachmentField.setValue(recordId.value, file);
-
-      if (result) {
-        addSaveLog('保存成功！', 'success');
+      // 批量保存所有文件
+      addSaveLog('开始批量保存文件...');
+      
+      try {
+        // 获取当前字段的现有值
+        let currentValue = await attachmentField.getValue(recordId.value);
+        console.log('当前字段值:', currentValue);
         
-        // 验证保存结果
+        // 准备要保存的文件数组
+        let filesToSave = [...files];
+        
+        // 检查是否有现有文件
+        if (currentValue && Array.isArray(currentValue) && currentValue.length > 0) {
+          addSaveLog(`检测到现有 ${currentValue.length} 个附件，新文件将替换现有文件`);
+        }
+        
+        // 使用setValue方法一次性保存所有文件
+        addSaveLog(`开始保存 ${filesToSave.length} 张水印图片...`);
+        
+        const result = await attachmentField.setValue(recordId.value, filesToSave);
+        
+        if (result) {
+          addSaveLog(`批量保存成功！共保存 ${filesToSave.length} 张图片`, 'success');
+        } else {
+          throw new Error('批量保存失败，返回false');
+        }
+        
+        // 验证最终保存结果
         setTimeout(async () => {
           try {
-            const savedValue = await attachmentField.getValue(recordId.value);
-            console.log('保存后的附件值:', savedValue);
-            if (savedValue && Array.isArray(savedValue) && savedValue.length > 0) {
-              addSaveLog('附件保存验证成功', 'success');
+            const finalValue = await attachmentField.getValue(recordId.value);
+            console.log('最终保存结果:', finalValue);
+            
+            if (finalValue && Array.isArray(finalValue) && finalValue.length > 0) {
+              const savedCount = finalValue.length;
+              addSaveLog(`保存验证成功！共保存 ${savedCount} 个附件`, 'success');
             } else {
-              addSaveLog('附件保存验证失败', 'error');
+              addSaveLog('保存验证失败', 'error');
             }
           } catch (verifyError) {
             console.error('验证保存结果失败:', verifyError);
@@ -318,8 +399,9 @@
           }
         }, 2000);
         
-      } else {
-        throw new Error('保存失败，返回false');
+      } catch (error) {
+        console.error('批量保存失败:', error);
+        throw new Error(`批量保存失败: ${error.message}`);
       }
 
     } catch (error) {
@@ -601,11 +683,47 @@
       }
       // 立即开始生成水印预览
       watermarkedImageUrl.value = await addWatermarkToImage(newVal);
+      // 更新当前图片的水印缓存
+      if (attachmentImages.value.length > 0 && currentImageIndex.value < attachmentImages.value.length) {
+        watermarkedImages.value[currentImageIndex.value] = watermarkedImageUrl.value;
+      }
     }
   });
 
   // 防抖函数
   let watermarkUpdateTimer = null;
+  
+  // 照片切换功能
+  function switchToPreviousImage() {
+    if (attachmentImages.value.length > 0) {
+      currentImageIndex.value = (currentImageIndex.value - 1 + attachmentImages.value.length) % attachmentImages.value.length;
+      updateCurrentImage();
+    }
+  }
+  
+  function switchToNextImage() {
+    if (attachmentImages.value.length > 0) {
+      currentImageIndex.value = (currentImageIndex.value + 1) % attachmentImages.value.length;
+      updateCurrentImage();
+    }
+  }
+  
+  function updateCurrentImage() {
+    if (attachmentImages.value.length > 0 && currentImageIndex.value < attachmentImages.value.length) {
+      const currentImage = attachmentImages.value[currentImageIndex.value];
+      imageUrl.value = currentImage.url;
+      // 更新水印预览
+      if (watermarkedImages.value[currentImageIndex.value]) {
+        watermarkedImageUrl.value = watermarkedImages.value[currentImageIndex.value];
+      } else {
+        // 如果还没有生成水印，则生成
+        addWatermarkToImage(currentImage.url).then(result => {
+          watermarkedImages.value[currentImageIndex.value] = result;
+          watermarkedImageUrl.value = result;
+        });
+      }
+    }
+  }
   
   // 监听水印设置变化，重新添加水印（带防抖）
   watch([watermarkText, watermarkFont, watermarkSize, watermarkColor, watermarkOpacity, watermarkPosition, watermarkX, watermarkY, watermarkSource, watermarkFieldValue], async () => {
@@ -708,18 +826,43 @@
 
             // 检查是否有附件且是图片
             if (Array.isArray(value) && value.length > 0 && attachmentUrls.length > 0) {
-              const firstAttachment = value[0];
-              // 检查MIME类型是否为图片
-              if (firstAttachment.type && firstAttachment.type.startsWith('image/')) {
+              // 筛选出图片类型的附件
+              const imageAttachments = value.filter((attachment, index) => {
+                return attachment.type && attachment.type.startsWith('image/') && attachmentUrls[index];
+              });
+              
+              if (imageAttachments.length > 0) {
                 isImageAttachment.value = true;
-                imageUrl.value = attachmentUrls[0];
-                console.log('图片URL:', imageUrl.value);
-                currentValue.value = `图片附件: ${firstAttachment.name}`;
+                attachmentImages.value = imageAttachments.map((attachment, index) => {
+                  const originalIndex = value.findIndex(item => item === attachment);
+                  return {
+                    name: attachment.name,
+                    type: attachment.type,
+                    url: attachmentUrls[originalIndex],
+                    size: attachment.size
+                  };
+                });
+                
+                // 重置索引和状态
+                currentImageIndex.value = 0;
+                watermarkedImages.value = new Array(attachmentImages.value.length);
+                
+                // 设置第一张图片为当前显示
+                imageUrl.value = attachmentImages.value[0].url;
+                currentValue.value = `图片附件: ${attachmentImages.value.length} 张图片`;
+                
+                console.log('多张图片附件:', attachmentImages.value);
               } else {
-                currentValue.value = `非图片附件: ${firstAttachment.name}`;
+                currentValue.value = '无图片附件';
+                attachmentImages.value = [];
+                currentImageIndex.value = 0;
+                watermarkedImages.value = [];
               }
             } else {
               currentValue.value = '无附件数据';
+              attachmentImages.value = [];
+              currentImageIndex.value = 0;
+              watermarkedImages.value = [];
             }
           } catch (error) {
             console.error('获取附件数据失败:', error);
@@ -795,6 +938,8 @@
           </select>
         </div>
         
+
+        
         <div class="setting-item">
           <label>{{ $t('label.font') }}:</label>
           <select v-model="watermarkFont">
@@ -842,10 +987,23 @@
       
       <!-- 预览区域 -->
       <div class="preview-container">
+        <!-- 照片切换控制 -->
+        <div v-if="attachmentImages.length > 1" class="image-navigation">
+          <button @click="switchToPreviousImage" class="nav-btn prev-btn" :disabled="attachmentImages.length <= 1">
+            ‹
+          </button>
+          <span class="image-counter">{{ currentImageIndex + 1 }} / {{ attachmentImages.length }}</span>
+          <button @click="switchToNextImage" class="nav-btn next-btn" :disabled="attachmentImages.length <= 1">
+            ›
+          </button>
+        </div>
+        
         <img v-if="watermarkedImageUrl || imageUrl" :src="watermarkedImageUrl || imageUrl" alt="预览图片" class="preview-image" />
         <div v-else class="preview-placeholder">
           <p>请选择图片进行水印处理</p>
         </div>
+        
+
       </div>
 
       <!-- 保存按钮 -->
@@ -986,6 +1144,8 @@
   margin-right: 10px;
 }
 
+
+
 .preview-container {
   position: relative;
   display: inline-block;
@@ -1081,6 +1241,48 @@
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
+
+.image-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+  gap: 10px;
+}
+
+.nav-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid #dcdfe6;
+  background-color: #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.nav-btn:hover:not(:disabled) {
+  background-color: #0442d2;
+  color: white;
+  border-color: #0442d2;
+}
+
+.nav-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.image-counter {
+  font-size: 14px;
+  color: #666;
+  min-width: 60px;
+  text-align: center;
+}
+
+
 
 .debug-info {
   margin-top: 12px;

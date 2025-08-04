@@ -3,7 +3,15 @@
     "base": "データテーブル",
     "view": "ビュー",
     "field": "フィールド",
-    "current": "現在選択されているセルデータ"
+    "current": "現在選択されているセルデータ",
+    "save_watermarked_image": "透かし画像を保存",
+    "previous_image": "前の画像",
+    "next_image": "次の画像",
+    "current_image": "現在の画像",
+    "total_images": "合計 {count} 枚の画像",
+    "batch_save_success": "一括保存成功！{count} 枚の画像を保存しました",
+    "batch_save_failed": "一括保存失敗、{success}/{total} 枚の画像を保存しました",
+    "no_images_to_save": "保存する画像がありません"
   },
   "placeholder": {
     "base": "データテーブルを選択してください",

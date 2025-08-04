@@ -21,7 +21,14 @@
     "horizontal_position": "Horizontal Position",
     "vertical_position": "Vertical Position",
     "target_field": "Target Field",
-    "save_watermarked_image": "Save Watermarked Image"
+    "save_watermarked_image": "Save Watermarked Image",
+    "previous_image": "Previous",
+    "next_image": "Next",
+    "current_image": "Current Image",
+    "total_images": "{count} images total",
+    "batch_save_success": "Batch save successful! Saved {count} images",
+    "batch_save_failed": "Batch save failed, {success}/{total} images saved",
+    "no_images_to_save": "No images to save"
   },
   "placeholder": {
     "base": "Select a table",

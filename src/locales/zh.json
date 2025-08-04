@@ -26,7 +26,14 @@
     "vertical_position": "纵向位置",
     "target_field": "目标字段",
     "save_watermarked_image": "保存水印图片",
-    "preview_placeholder": "请选择图片进行水印处理"
+    "preview_placeholder": "请选择图片进行水印处理",
+    "previous_image": "上一张",
+    "next_image": "下一张",
+    "current_image": "当前图片",
+    "total_images": "共 {count} 张图片",
+    "batch_save_success": "批量保存成功！共保存 {count} 张图片",
+    "batch_save_failed": "批量保存失败，成功 {success}/{total} 张图片",
+    "no_images_to_save": "没有图片需要保存"
   },
   "placeholder": {
     "base": "请选择数据表",
@@ -47,6 +54,8 @@
     "network_error": "网络连接失败，请检查网络设置",
     "permission_error": "权限不足，请检查插件权限设置",
     "image_format_error": "图片处理失败，请检查图片格式",
-    "field_operation_error": "字段操作失败，请检查字段类型"
+    "field_operation_error": "字段操作失败，请检查字段类型",
+    "image_processing_progress": "正在处理第 {current}/{total} 张图片...",
+    "image_conversion_success": "第 {index} 张图片转换成功，大小: {size}KB"
   }
 }
