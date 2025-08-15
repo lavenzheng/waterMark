@@ -5,8 +5,8 @@ yarn-debug.log*
 yarn-error.log*
 
 # Build outputs
-dist/
 build/
+# dist/  # 注释掉，允许提交构建输出目录
 
 # Environment variables
 .env
